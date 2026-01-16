@@ -38,6 +38,18 @@ def compressibility():
     return config
 
 
+def compressibility_and_classifier():
+    config = compressibility()
+    config.reward_fn = "jpeg_and_classifier"
+    
+    # dataset
+    config.dataset = ml_collections.ConfigDict()
+    config.dataset.root = "/cephfs/shared/data"
+    config.dataset.num_workers = 4
+    
+    return config
+
+
 def incompressibility():
     config = compressibility()
     config.reward_fn = "jpeg_incompressibility"

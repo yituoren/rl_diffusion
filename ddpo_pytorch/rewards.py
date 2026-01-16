@@ -29,6 +29,17 @@ def jpeg_compressibility():
     return _fn
 
 
+def jpeg_and_classifier():
+    jpeg_fn = jpeg_compressibility()
+    classifier = None
+    
+    def _fn(images, prompts, metadata):
+        rew, meta = jpeg_fn(images, prompts, metadata)
+        return rew, meta
+    
+    return _fn
+
+
 def aesthetic_score():
     from ddpo_pytorch.aesthetic_scorer import AestheticScorer
 
