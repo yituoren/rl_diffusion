@@ -39,8 +39,9 @@ logger = get_logger(__name__)
 def main(_):
     # basic Accelerate and logging setup
     config = FLAGS.config
-
-    if accelerator.num_processes == 4:
+    
+    num_processes = int(os.environ.get("WORLD_SIZE", 1))
+    if num_processes == 4:
         config.sample.num_batches_per_epoch = 8
         config.train.gradient_accumulation_steps = 4
 
@@ -620,8 +621,8 @@ def main(_):
                             accelerator.clip_grad_norm_(
                                 unet.parameters(), config.train.max_grad_norm
                             )
-                        optimizer.step()
-                        optimizer.zero_grad()
+                            optimizer.step()
+                            optimizer.zero_grad()
 
                     # Checks if the accelerator has performed an optimization step behind the scenes
                     if accelerator.sync_gradients:

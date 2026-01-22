@@ -44,7 +44,7 @@ def compressibility_and_classifier():
     
     # dataset
     config.dataset = ml_collections.ConfigDict()
-    config.dataset.root = "/cephfs/zhaorui/data/cifar"
+    config.dataset.root = "/cephfs/shared/data/cifar10"
     config.dataset.num_workers = 4
     
     config.logdir = "/cephfs/zhaorui/rl_diffusion_logs"
