@@ -25,12 +25,13 @@ from functools import partial
 import tqdm
 import tempfile
 from PIL import Image
+from torchvision import transforms
 
 tqdm = partial(tqdm.tqdm, dynamic_ncols=True)
 
 
 FLAGS = flags.FLAGS
-config_flags.DEFINE_config_file("config", "config/base.py", "Training configuration.")
+config_flags.DEFINE_config_file("config", "config/dgx.py:compressibility_and_classifier", "Training configuration.")
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,10 @@ logger = get_logger(__name__)
 def main(_):
     # basic Accelerate and logging setup
     config = FLAGS.config
+
+    if accelerator.num_processes == 4:
+        config.sample.num_batches_per_epoch = 8
+        config.train.gradient_accumulation_steps = 4
 
     unique_id = datetime.datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
     if not config.run_name:
@@ -230,6 +235,10 @@ def main(_):
     prompt_fn = getattr(ddpo_pytorch.prompts, config.prompt_fn)
     reward_fn = getattr(ddpo_pytorch.rewards, config.reward_fn)()
 
+    # prepare CIFAR10 data loader
+    train_loader, _ = get_data_loaders(config.dataset.root, batch_size=config.sample.batch_size, num_workers=config.dataset.num_workers)
+    train_iter = iter(train_loader)
+
     # generate negative prompt embeddings
     neg_prompt_embed = pipeline.text_encoder(
         pipeline.tokenizer(
@@ -314,13 +323,26 @@ def main(_):
             disable=not accelerator.is_local_main_process,
             position=0,
         ):
-            # generate prompts
-            prompts, prompt_metadata = zip(
-                *[
-                    prompt_fn(**config.prompt_fn_kwargs)
-                    for _ in range(config.sample.batch_size)
-                ]
-            )
+            # get CIFAR10 batch
+            try:
+                gt_images, gt_labels = next(train_iter)
+            except StopIteration:
+                train_iter = iter(train_loader)
+                gt_images, gt_labels = next(train_iter)
+            
+            gt_images = gt_images.to(accelerator.device)
+            # Resize and normalize to [-1, 1]
+            gt_images_resized = transforms.Resize(512)(gt_images)
+            gt_images_normalized = gt_images_resized * 2 - 1
+            
+            # Encode GT images to latents
+            with torch.no_grad():
+                gt_latents = pipeline.vae.encode(gt_images_normalized.to(inference_dtype)).latent_dist.sample()
+                gt_latents = gt_latents * pipeline.vae.config.scaling_factor
+            
+            # prompts are empty strings
+            prompts = [""] * config.sample.batch_size
+            prompt_metadata = [{} for _ in prompts]
 
             # encode prompts
             prompt_ids = pipeline.tokenizer(
@@ -332,6 +354,11 @@ def main(_):
             ).input_ids.to(accelerator.device)
             prompt_embeds = pipeline.text_encoder(prompt_ids)[0]
 
+            # add noise to latents
+            pipeline.scheduler.set_timesteps(config.sample.num_steps, device=accelerator.device)
+            noise = torch.randn_like(gt_latents)
+            noisy_latents = pipeline.scheduler.add_noise(gt_latents, noise, pipeline.scheduler.timesteps[0])
+
             # sample
             with autocast():
                 images, _, latents, log_probs = pipeline_with_logprob(
@@ -341,6 +368,7 @@ def main(_):
                     num_inference_steps=config.sample.num_steps,
                     guidance_scale=config.sample.guidance_scale,
                     eta=config.sample.eta,
+                    latents=noisy_latents,
                     output_type="pt",
                 )
 
@@ -370,6 +398,7 @@ def main(_):
                     ],  # each entry is the latent after timestep t
                     "log_probs": log_probs,
                     "rewards": rewards,
+                    "gt_images": gt_images,
                 }
             )
 
@@ -395,6 +424,15 @@ def main(_):
                 )
                 pil = pil.resize((256, 256))
                 pil.save(os.path.join(tmpdir, f"{i}.jpg"))
+
+                # Also save GT image
+                gt_image = samples["gt_images"][-len(images) + i]
+                gt_pil = Image.fromarray(
+                    (gt_image.cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
+                )
+                gt_pil = gt_pil.resize((256, 256))
+                gt_pil.save(os.path.join(tmpdir, f"{i}_gt.jpg"))
+
             accelerator.log(
                 {
                     "images": [
@@ -405,6 +443,13 @@ def main(_):
                         for i, (prompt, reward) in enumerate(
                             zip(prompts, rewards)
                         )  # only log rewards from process 0
+                    ],
+                    "gt_images": [
+                        wandb.Image(
+                            os.path.join(tmpdir, f"{i}_gt.jpg"),
+                            caption=f"{prompt:.25}",
+                        )
+                        for i, prompt in enumerate(prompts)
                     ],
                 },
                 step=global_step,
@@ -444,6 +489,7 @@ def main(_):
 
         del samples["rewards"]
         del samples["prompt_ids"]
+        del samples["gt_images"]
 
         total_batch_size, num_timesteps = samples["timesteps"].shape
         assert (

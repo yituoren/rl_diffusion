@@ -8,7 +8,7 @@ base = imp.load_source("base", os.path.join(os.path.dirname(__file__), "base.py"
 def compressibility():
     config = base.get_config()
 
-    config.pretrained.model = "CompVis/stable-diffusion-v1-4"
+    # config.pretrained.model = "CompVis/stable-diffusion-v1-4"
 
     config.num_epochs = 100
     config.use_lora = True
@@ -44,8 +44,10 @@ def compressibility_and_classifier():
     
     # dataset
     config.dataset = ml_collections.ConfigDict()
-    config.dataset.root = "/cephfs/shared/data"
+    config.dataset.root = "/cephfs/zhaorui/data/cifar"
     config.dataset.num_workers = 4
+    
+    config.logdir = "/cephfs/zhaorui/rl_diffusion_logs"
     
     return config
 
