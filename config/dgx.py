@@ -49,6 +49,9 @@ def compressibility_and_classifier():
     
     config.logdir = "/cephfs/zhaorui/rl_diffusion_logs"
     
+    config.sample.guidance_scale = 1.0
+    config.train.cfg = False
+    
     return config
 
 
