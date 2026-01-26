@@ -2,7 +2,7 @@ from PIL import Image
 import io
 import numpy as np
 import torch
-
+import torch.nn.functional as F
 
 def jpeg_incompressibility():
     def _fn(images, prompts, metadata):
@@ -29,13 +29,14 @@ def jpeg_compressibility():
     return _fn
 
 
-def jpeg_and_classifier():
+def jpeg_and_classifier(classifier):
     jpeg_fn = jpeg_compressibility()
-    classifier = None
     
-    def _fn(images, prompts, metadata):
+    def _fn(images, gt_labels, prompts, metadata):
         rew, meta = jpeg_fn(images, prompts, metadata)
-        return rew, meta
+        recon_labels = classifier(images)
+        loss = F.cross_entropy(recon_labels, gt_labels)
+        return rew - loss, meta
     
     return _fn
 

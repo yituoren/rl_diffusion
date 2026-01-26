@@ -3,6 +3,7 @@ import contextlib
 import os
 import datetime
 from concurrent import futures
+from re import S
 import time
 from absl import app, flags
 from ml_collections import config_flags
@@ -19,6 +20,7 @@ from ddpo_pytorch.data import get_data_loaders
 from ddpo_pytorch.stat_tracking import PerPromptStatTracker
 from ddpo_pytorch.diffusers_patch.pipeline_with_logprob import pipeline_with_logprob
 from ddpo_pytorch.diffusers_patch.ddim_with_logprob import ddim_step_with_logprob
+from ddpo_pytorch.classifier_utils import load_classifier_ensemble
 import torch
 import wandb
 from functools import partial
@@ -64,9 +66,12 @@ def main(_):
                 config.resume_from,
                 sorted(checkpoints, key=lambda x: int(x.split("_")[-1]))[-1],
             )
+            
+    # set start step
+    start_step = 30
 
     # number of timesteps within each trajectory to train on
-    num_train_timesteps = int(config.sample.num_steps * config.train.timestep_fraction)
+    num_train_timesteps = int((config.sample.num_steps - start_step) * config.train.timestep_fraction)
 
     accelerator_config = ProjectConfiguration(
         project_dir=os.path.join(config.logdir, config.run_name),
@@ -233,8 +238,9 @@ def main(_):
     )
 
     # prepare prompt and reward fn
+    classifier = load_classifier_ensemble(config, device=accelerator.device)
     prompt_fn = getattr(ddpo_pytorch.prompts, config.prompt_fn)
-    reward_fn = getattr(ddpo_pytorch.rewards, config.reward_fn)()
+    reward_fn = getattr(ddpo_pytorch.rewards, config.reward_fn)(classifier)
 
     # prepare CIFAR10 data loader
     train_loader, _ = get_data_loaders(config.dataset.root, batch_size=config.sample.batch_size, num_workers=config.dataset.num_workers)
@@ -358,7 +364,7 @@ def main(_):
             # add noise to latents
             pipeline.scheduler.set_timesteps(config.sample.num_steps, device=accelerator.device)
             noise = torch.randn_like(gt_latents)
-            noisy_latents = pipeline.scheduler.add_noise(gt_latents, noise, pipeline.scheduler.timesteps[0])
+            noisy_latents = pipeline.scheduler.add_noise(gt_latents, noise, pipeline.scheduler.timesteps[start_step])
 
             # sample
             with autocast():
@@ -367,6 +373,7 @@ def main(_):
                     prompt_embeds=prompt_embeds,
                     negative_prompt_embeds=sample_neg_prompt_embeds,
                     num_inference_steps=config.sample.num_steps,
+                    start_step=start_step,
                     guidance_scale=config.sample.guidance_scale,
                     eta=config.sample.eta,
                     latents=noisy_latents,
@@ -377,12 +384,12 @@ def main(_):
                 latents, dim=1
             )  # (batch_size, num_steps + 1, 4, 64, 64)
             log_probs = torch.stack(log_probs, dim=1)  # (batch_size, num_steps, 1)
-            timesteps = pipeline.scheduler.timesteps.repeat(
+            timesteps = pipeline.scheduler.timesteps[start_step:].repeat(
                 config.sample.batch_size, 1
             )  # (batch_size, num_steps)
 
             # compute rewards asynchronously
-            rewards = executor.submit(reward_fn, images, prompts, prompt_metadata)
+            rewards = executor.submit(reward_fn, images, gt_labels, prompts, prompt_metadata)
             # yield to to make sure reward computation starts
             time.sleep(0)
 
@@ -497,7 +504,7 @@ def main(_):
             total_batch_size
             == config.sample.batch_size * config.sample.num_batches_per_epoch
         )
-        assert num_timesteps == config.sample.num_steps
+        assert num_timesteps == config.sample.num_steps - start_step
 
         #################### TRAINING ####################
         for inner_epoch in range(config.train.num_inner_epochs):

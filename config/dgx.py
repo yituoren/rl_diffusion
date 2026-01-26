@@ -52,6 +52,20 @@ def compressibility_and_classifier():
     config.sample.guidance_scale = 1.0
     config.train.cfg = False
     
+    config.classifier_checkpoint = "/cephfs/shared/ckpt/cifar10_classifier/classifier_best.pth"
+    
+    config.classifier = {
+        "model_type": "resnet",
+        "resnet_arch": "resnet18",
+        "pretrained": True,
+        "freeze_backbone": False,
+        "num_classes": 10,
+        "in_channels": 3,
+        "hidden_dims": [64, 128, 256],
+        "fc_hidden": 256,
+        "dropout": 0.3
+    }
+    
     return config
 
 

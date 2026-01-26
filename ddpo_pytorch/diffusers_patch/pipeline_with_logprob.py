@@ -22,6 +22,7 @@ def pipeline_with_logprob(
     height: Optional[int] = None,
     width: Optional[int] = None,
     num_inference_steps: int = 50,
+    start_step: int = 0,
     guidance_scale: float = 7.5,
     negative_prompt: Optional[Union[str, List[str]]] = None,
     num_images_per_prompt: Optional[int] = 1,
@@ -159,7 +160,7 @@ def pipeline_with_logprob(
 
     # 4. Prepare timesteps
     self.scheduler.set_timesteps(num_inference_steps, device=device)
-    timesteps = self.scheduler.timesteps
+    timesteps = self.scheduler.timesteps[start_step:]
 
     # 5. Prepare latent variables
     num_channels_latents = self.unet.config.in_channels
@@ -178,10 +179,10 @@ def pipeline_with_logprob(
     extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
     # 7. Denoising loop
-    num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+    num_warmup_steps = len(timesteps) - len(timesteps) * self.scheduler.order
     all_latents = [latents]
     all_log_probs = []
-    with self.progress_bar(total=num_inference_steps) as progress_bar:
+    with self.progress_bar(total=len(timesteps)) as progress_bar:
         for i, t in enumerate(timesteps):
             # expand the latents if we are doing classifier free guidance
             latent_model_input = (
