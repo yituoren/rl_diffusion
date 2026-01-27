@@ -3,6 +3,7 @@ import io
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torchvision import transforms
 
 def jpeg_incompressibility():
     def _fn(images, prompts, metadata):
@@ -34,8 +35,13 @@ def jpeg_and_classifier(classifier):
     
     def _fn(images, gt_labels, prompts, metadata):
         rew, meta = jpeg_fn(images, prompts, metadata)
+        
+        images = transforms.Resize(32)(images.to(torch.float32))
         recon_labels = classifier(images)
+        
         loss = F.cross_entropy(recon_labels, gt_labels)
+        loss = loss.detach().cpu().numpy()
+        
         return rew - loss, meta
     
     return _fn

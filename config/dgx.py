@@ -47,13 +47,15 @@ def compressibility_and_classifier():
     config.dataset.root = "/cephfs/shared/data/cifar10"
     config.dataset.num_workers = 4
     
+    # directory
     config.logdir = "/cephfs/zhaorui/rl_diffusion_logs"
+    config.classifier_checkpoint = "/cephfs/shared/ckpt/cifar10_classifier/classifier_best.pth"
     
+    # disable cfg
     config.sample.guidance_scale = 1.0
     config.train.cfg = False
     
-    config.classifier_checkpoint = "/cephfs/shared/ckpt/cifar10_classifier/classifier_best.pth"
-    
+    # classifier config
     config.classifier = {
         "model_type": "resnet",
         "resnet_arch": "resnet18",
@@ -65,6 +67,9 @@ def compressibility_and_classifier():
         "fc_hidden": 256,
         "dropout": 0.3
     }
+    
+    # start step
+    config.start_step = 30
     
     return config
 

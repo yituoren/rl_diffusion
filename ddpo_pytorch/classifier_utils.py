@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import os
 from torchvision import models
-from reward_models.classifier import get_classifier
+from .reward_models.classifier import get_classifier
 
 class ClassifierEnsemble(nn.Module):
     def __init__(self, classifiers):
@@ -42,6 +42,6 @@ def load_classifier_ensemble(config, device):
             param.requires_grad = False
         
         loaded_classifiers.append(classifier)
-        print(f"✓ Loaded classifier from {path}")
+        print(f"Successfully loaded classifier from {path}")
     
     return ClassifierEnsemble(loaded_classifiers).to(device)

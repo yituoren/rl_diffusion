@@ -68,7 +68,7 @@ def main(_):
             )
             
     # set start step
-    start_step = 30
+    start_step = config.start_step
 
     # number of timesteps within each trajectory to train on
     num_train_timesteps = int((config.sample.num_steps - start_step) * config.train.timestep_fraction)
@@ -338,6 +338,7 @@ def main(_):
                 gt_images, gt_labels = next(train_iter)
             
             gt_images = gt_images.to(accelerator.device)
+            gt_labels = gt_labels.to(accelerator.device)
             # Resize and normalize to [-1, 1]
             gt_images_resized = transforms.Resize(512)(gt_images)
             gt_images_normalized = gt_images_resized * 2 - 1
