@@ -16,7 +16,7 @@ from diffusers.models.attention_processor import LoRAAttnProcessor
 import numpy as np
 import ddpo_pytorch.prompts
 import ddpo_pytorch.rewards
-from ddpo_pytorch.data import get_data_loaders
+from ddpo_pytorch.data import get_cifar10_128_data_loaders, get_cifar10_data_loaders
 from ddpo_pytorch.stat_tracking import PerPromptStatTracker
 from ddpo_pytorch.diffusers_patch.pipeline_with_logprob import pipeline_with_logprob
 from ddpo_pytorch.diffusers_patch.ddim_with_logprob import ddim_step_with_logprob
@@ -243,7 +243,10 @@ def main(_):
     reward_fn = getattr(ddpo_pytorch.rewards, config.reward_fn)(classifier)
 
     # prepare CIFAR10 data loader
-    train_loader, _ = get_data_loaders(config.dataset.root, batch_size=config.sample.batch_size, num_workers=config.dataset.num_workers)
+    if config.input_resolution == 128:
+        train_loader, _ = get_cifar10_128_data_loaders(config.dataset.root, batch_size=config.sample.batch_size, num_workers=config.dataset.num_workers)
+    else:
+        train_loader, _ = get_cifar10_data_loaders(config.dataset.root, batch_size=config.sample.batch_size, num_workers=config.dataset.num_workers)
     train_iter = iter(train_loader)
 
     # generate negative prompt embeddings
@@ -390,7 +393,7 @@ def main(_):
             )  # (batch_size, num_steps)
 
             # compute rewards asynchronously
-            rewards = executor.submit(reward_fn, images, gt_labels, prompts, prompt_metadata)
+            rewards = executor.submit(reward_fn, images, gt_labels, config.input_resolution, prompts, prompt_metadata)
             # yield to to make sure reward computation starts
             time.sleep(0)
 

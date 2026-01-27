@@ -33,10 +33,10 @@ def jpeg_compressibility():
 def jpeg_and_classifier(classifier):
     jpeg_fn = jpeg_compressibility()
     
-    def _fn(images, gt_labels, prompts, metadata):
+    def _fn(images, gt_labels, input_resolution, prompts, metadata):
         rew, meta = jpeg_fn(images, prompts, metadata)
         
-        images = transforms.Resize(32)(images.to(torch.float32))
+        images = transforms.Resize(input_resolution)(images.to(torch.float32))
         recon_labels = classifier(images)
         
         loss = F.cross_entropy(recon_labels, gt_labels)

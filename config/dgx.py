@@ -44,12 +44,13 @@ def compressibility_and_classifier():
     
     # dataset
     config.dataset = ml_collections.ConfigDict()
-    config.dataset.root = "/cephfs/shared/data/cifar10"
+    config.dataset.root = "/cephfs/shared/data/cifar10_128"
+    config.input_resolution = 128
     config.dataset.num_workers = 4
     
     # directory
     config.logdir = "/cephfs/zhaorui/rl_diffusion_logs"
-    config.classifier_checkpoint = "/cephfs/shared/ckpt/cifar10_classifier/classifier_best.pth"
+    config.classifier_checkpoint = "/cephfs/shared/ckpt/cifar10_128_classifier/classifier_best.pth"
     
     # disable cfg
     config.sample.guidance_scale = 1.0
@@ -65,7 +66,8 @@ def compressibility_and_classifier():
         "in_channels": 3,
         "hidden_dims": [64, 128, 256],
         "fc_hidden": 256,
-        "dropout": 0.3
+        "dropout": 0.3,
+        "architecture": "simple"
     }
     
     # start step
